@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>仰臥起坐小組測驗系統</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #f3f6fa; color: #172033; }
+    main { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+    .card { background: #fff; border: 1px solid #dfe5ed; border-radius: 16px; padding: 22px; margin-bottom: 16px; box-shadow: 0 8px 24px rgba(29, 50, 80, .06); }
+    h1, h2 { margin: 0 0 16px; } h1 { color: #1769aa; font-size: 28px; } h2 { font-size: 19px; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 12px; }
+    label { display: block; font-weight: 700; margin-bottom: 6px; }
+    input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #c8d1dc; border-radius: 9px; font-size: 17px; }
+    button { border: 0; border-radius: 9px; padding: 12px 16px; font-size: 16px; font-weight: 700; cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    .primary { background: #1769aa; color: #fff; } .secondary { background: #e8f0f8; color: #1769aa; }
+    .danger { background: #fff0ef; color: #ba3028; } .wide { width: 100%; margin-top: 14px; }
+    .hint { color: #5d6b7c; margin: 0 0 14px; }
+    .student-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .student-card { border: 1px solid #dfe5ed; border-radius: 12px; padding: 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+    .student-card strong { display: block; } .student-card small { color: #5d6b7c; }
+    .remove { padding: 6px 9px; font-size: 13px; }
+    .timer { text-align: center; font-size: 48px; font-weight: 800; color: #1769aa; margin: 12px 0; }
+    .timer.finished { color: #ba3028; } .actions { display: flex; gap: 10px; } .actions button { flex: 1; }
+    .count-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .count-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #dfe5ed; border-radius: 10px; padding: 10px; }
+    .count-row .name { min-width: 0; } .count-row small { display: block; color: #5d6b7c; }
+    .count-row .count { min-width: 42px; text-align: center; font-size: 28px; font-weight: 800; color: #1769aa; }
+    .count-row button { width: 46px; height: 46px; padding: 0; font-size: 25px; }
+    .status { padding: 11px; border-radius: 8px; margin-top: 12px; display: none; white-space: pre-line; }
+    .status.show { display: block; } .status.error { color: #a3211b; background: #fff0ef; } .status.ok { color: #166534; background: #ecfdf3; }
+    .camera-panel { margin-top: 14px; } .camera-wrap { position: relative; max-width: 640px; margin: 12px auto 0; background: #172033; border-radius: 12px; overflow: hidden; }
+    #cameraVideo, #cameraCanvas { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+    #cameraVideo { transform: scaleX(-1); } #cameraCanvas { position: absolute; inset: 0; }
+    .camera-status { margin-top: 10px; color: #5d6b7c; text-align: center; }
+    .camera-actions { display: flex; gap: 10px; margin-top: 10px; } .camera-actions button { flex: 1; }
+    table { width: 100%; border-collapse: collapse; } th, td { padding: 10px 6px; border-bottom: 1px solid #e8edf2; text-align: left; }
+    th { color: #5d6b7c; font-size: 14px; } .empty { text-align: center; color: #697789; padding: 18px; }
+    @media (max-width: 600px) { .grid, .student-list, .count-grid { grid-template-columns: 1fr; } .card { padding: 16px; } }
+  </style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <h1>仰臥起坐小組測驗</h1>
+    <p class="hint">先逐位加入學生，建議每組 5–10 人；開始後所有學生共用同一個倒數計時器。</p>
+    <div class="grid">
+      <div><label for="studentId">班別＋號碼</label><input id="studentId" autocomplete="off" placeholder="例如 1A01"></div>
+      <div><label for="duration">測驗時間（秒）</label><input id="duration" type="number" min="1" max="3600" value="60"></div>
+    </div>
+    <button id="addButton" class="primary wide">加入學生</button>
+    <div id="studentList" class="student-list"></div>
+    <div id="status" class="status"></div>
+  </section>
+
+  <section id="testCard" class="card" hidden>
+    <h2>同步測驗</h2>
+    <div id="timer" class="timer">01:00</div>
+    <div class="actions">
+      <button id="startButton" class="primary">開始倒數</button>
+      <button id="resetButton" class="danger">重設次數</button>
+    </div>
+    <div id="countGrid" class="count-grid" style="margin-top:14px"></div>
+    <div class="camera-panel">
+      <h2>鏡頭自動計數</h2>
+      <p class="hint">請用側面拍攝一位學生。鏡頭只在本機分析姿勢，不會保存或上傳影像。</p>
+      <div class="camera-actions">
+        <button id="cameraStartButton" class="secondary">開啟鏡頭</button>
+        <button id="cameraStopButton" class="danger" disabled>關閉鏡頭</button>
+      </div>
+      <div class="camera-wrap" hidden>
+        <video id="cameraVideo" playsinline muted></video>
+        <canvas id="cameraCanvas"></canvas>
+      </div>
+      <div id="cameraStatus" class="camera-status">鏡頭尚未開啟</div>
+    </div>
+    <button id="saveButton" class="primary wide" disabled>儲存全部成績</button>
+  </section>
+
+  <section class="card">
+    <h2>本週測驗記錄</h2>
+    <button id="refreshButton" class="secondary">重新整理</button>
+    <div id="records" class="empty">正在載入…</div>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  // Paste the deployed Apps Script Web App URL here when the Sheet is ready.
+  const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwmceHbAdFQQlLco7rwQgTbrJwyBckiR0vAq-LiNqehx0V_ab6UY9c5Ixx89rShui4IPw/exec';
+  const students = [];
+  let remaining = 60;
+  let timerId = null;
+  let camera = null;
+  let pose = null;
+  let poseState = 'down';
+  const setStatus = (message, type = '') => { $('status').textContent = message; $('status').className = `status show ${type}`; };
+  const request = async (body) => {
+    const response = await fetch(GOOGLE_APPS_SCRIPT_URL || '/api', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (!response.ok || data.status === 'error') throw new Error(data.message || '伺服器要求失敗');
+    return data;
+  };
+  const formatTime = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  const renderStudents = () => {
+    $('studentList').innerHTML = students.map((student, index) =>
+      `<div class="student-card"><div><strong>${student.name}</strong><small>${student.studentClass || '—'}　${student.studentId || ''}</small></div><button class="danger remove" data-index="${index}">移除</button></div>`
+    ).join('');
+    $('testCard').hidden = students.length === 0;
+    $('studentList').querySelectorAll('.remove').forEach(button => button.addEventListener('click', () => {
+      students.splice(Number(button.dataset.index), 1); renderStudents(); renderCounts();
+    }));
+  };
+  const renderCounts = () => {
+    $('countGrid').innerHTML = students.map((student, index) =>
+      `<div class="count-row"><div class="name"><strong>${student.name}</strong><small>${student.studentClass || '—'}　${student.studentId || ''}</small></div><button class="primary" data-index="${index}">＋</button><div class="count">${student.count}</div></div>`
+    ).join('');
+    $('countGrid').querySelectorAll('button').forEach(button => button.addEventListener('click', () => {
+      if (!timerId && remaining === Number($('duration').value)) return;
+      students[Number(button.dataset.index)].count += 1; renderCounts();
+    }));
+  };
+  const updateTimer = () => { $('timer').textContent = formatTime(remaining); $('timer').classList.toggle('finished', remaining === 0); };
+  const setCameraStatus = (message, type = '') => {
+    $('cameraStatus').textContent = message;
+    $('cameraStatus').style.color = type === 'error' ? '#a3211b' : type === 'ok' ? '#166534' : '#5d6b7c';
+  };
+  const torsoAngle = (landmarks) => {
+    const side = landmarks[11].visibility >= landmarks[12].visibility ? [11, 23] : [12, 24];
+    const shoulder = landmarks[side[0]];
+    const hip = landmarks[side[1]];
+    if (!shoulder || !hip || shoulder.visibility < 0.55 || hip.visibility < 0.55) return null;
+    const degrees = Math.atan2(Math.abs(shoulder.y - hip.y), Math.abs(shoulder.x - hip.x)) * 180 / Math.PI;
+    return Math.round(degrees);
+  };
+  const handlePoseResults = (results) => {
+    const canvas = $('cameraCanvas');
+    const video = $('cameraVideo');
+    canvas.width = video.videoWidth || 640; canvas.height = video.videoHeight || 480;
+    const context = canvas.getContext('2d');
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (!results.poseLandmarks) { setCameraStatus('看不到完整身體，請調整側面鏡頭。'); return; }
+    drawConnectors(context, results.poseLandmarks, POSE_CONNECTIONS, { color: '#34a853', lineWidth: 3 });
+    drawLandmarks(context, results.poseLandmarks, { color: '#1769aa', lineWidth: 1, radius: 3 });
+    const angle = torsoAngle(results.poseLandmarks);
+    if (angle === null) { setCameraStatus('請讓肩膀和髖部清楚出現在鏡頭內。'); return; }
+    const currentStudent = students[0];
+    if (!currentStudent) return;
+    if (angle <= 30) {
+      poseState = 'down';
+      setCameraStatus(`躺下位置（軀幹角度 ${angle}°），起身後會自動計數。`, 'ok');
+    } else if (angle >= 55) {
+      if (poseState === 'down' && timerId) {
+        currentStudent.count += 1;
+        poseState = 'up';
+        renderCounts();
+      } else if (poseState === 'down') {
+        poseState = 'up';
+      }
+      setCameraStatus(`${timerId ? '起身位置' : '請先開始倒數'}（軀幹角度 ${angle}°），目前 ${currentStudent.count} 次。`, timerId ? 'ok' : '');
+    } else {
+      setCameraStatus(`動作中（軀幹角度 ${angle}°），請完成躺下或起身。`);
+    }
+  };
+  $('cameraStartButton').addEventListener('click', async () => {
+    if (!students.length) return setStatus('請先加入學生，再開啟鏡頭。', 'error');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return setCameraStatus('此瀏覽器不支援鏡頭，請使用 HTTPS 或 localhost 開啟。', 'error');
+    if (typeof Pose === 'undefined' || typeof Camera === 'undefined') return setCameraStatus('姿勢辨識元件載入失敗，請檢查網絡連線後重新整理。', 'error');
+    $('cameraStartButton').disabled = true;
+    try {
+      pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+      pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+      pose.onResults(handlePoseResults);
+      const video = $('cameraVideo');
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      video.srcObject = stream;
+      await video.play();
+      camera = new Camera(video, { onFrame: async () => { await pose.send({ image: video }); }, width: 1280, height: 720 });
+      $('cameraVideo').parentElement.hidden = false;
+      $('cameraStopButton').disabled = false;
+      poseState = 'down';
+      setCameraStatus('鏡頭已開啟。請先躺下，再起身完成一次。', 'ok');
+    } catch (error) {
+      $('cameraStartButton').disabled = false;
+      setCameraStatus(`無法開啟鏡頭：${error.message}`, 'error');
+    }
+  });
+  $('cameraStopButton').addEventListener('click', () => {
+    const video = $('cameraVideo');
+    if (camera) camera.stop();
+    if (video.srcObject) video.srcObject.getTracks().forEach(track => track.stop());
+    video.srcObject = null; camera = null;
+    $('cameraVideo').parentElement.hidden = true; $('cameraStartButton').disabled = false; $('cameraStopButton').disabled = true;
+    setCameraStatus('鏡頭已關閉。');
+  });
+  $('addButton').addEventListener('click', async () => {
+    const studentId = $('studentId').value.trim();
+    if (!studentId) return setStatus('請輸入班別＋號碼。', 'error');
+    if (students.length >= 10) return setStatus('每組最多 10 位學生。', 'error');
+    $('addButton').disabled = true;
+    try {
+      const data = await request({ action: 'searchStudent', studentId });
+      if (data.status !== 'found') throw new Error('找不到學生，請確認編號。');
+      if (students.some(student => student.studentId === data.student.studentId)) throw new Error('這位學生已加入。');
+      students.push({ ...data.student, count: 0 }); $('studentId').value = ''; renderStudents(); renderCounts();
+      setStatus(`已加入 ${students.length} 位學生。`, 'ok');
+    } catch (error) { setStatus(error.message, 'error'); }
+    finally { $('addButton').disabled = false; }
+  });
+  $('duration').addEventListener('change', () => { if (!timerId) { remaining = Number($('duration').value) || 60; updateTimer(); } });
+  $('startButton').addEventListener('click', () => {
+    if (students.length < 1) return setStatus('請先加入學生。', 'error');
+    if (timerId) return;
+    $('startButton').disabled = true; $('duration').disabled = true; $('saveButton').disabled = true;
+    timerId = setInterval(() => {
+      remaining -= 1; updateTimer();
+      if (remaining <= 0) { clearInterval(timerId); timerId = null; $('saveButton').disabled = false; setStatus('時間到！請確認次數後儲存全部成績。', 'ok'); }
+    }, 1000);
+  });
+  $('resetButton').addEventListener('click', () => { students.forEach(student => { student.count = 0; }); renderCounts(); });
+  $('saveButton').addEventListener('click', async () => {
+    $('saveButton').disabled = true;
+    try {
+      await request({ action: 'saveSitUpBatch', students, duration: Number($('duration').value) });
+      setStatus(`已儲存 ${students.length} 位學生的成績。`, 'ok'); students.splice(0); remaining = Number($('duration').value) || 60; $('duration').disabled = false; renderStudents(); renderCounts(); updateTimer(); await loadRecords();
+    } catch (error) { $('saveButton').disabled = false; setStatus(error.message, 'error'); }
+  });
+  function renderRecords(rows) {
+    if (!rows.length) { $('records').className = 'empty'; $('records').textContent = '暫時沒有記錄'; return; }
+    $('records').className = ''; $('records').innerHTML = `<table><thead><tr><th>時間</th><th>班別</th><th>學生</th><th>次數</th><th>秒數</th></tr></thead><tbody>${rows.map(row => `<tr><td>${row.time || ''}</td><td>${row.studentClass || ''}</td><td>${row.name || ''}</td><td>${row.count || 0}</td><td>${row.duration || ''}</td></tr>`).join('')}</tbody></table>`;
+  }
+  async function loadRecords() { try { renderRecords((await request({ action: 'getSitUpLogs' })).logs); } catch (error) { $('records').className = 'status show error'; $('records').textContent = error.message; } }
+  $('refreshButton').addEventListener('click', loadRecords);
+  $('studentId').addEventListener('keydown', event => { if (event.key === 'Enter') $('addButton').click(); });
+  updateTimer(); loadRecords();
+</script>
+</body>
+</html>
